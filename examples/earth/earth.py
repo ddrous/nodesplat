@@ -16,7 +16,7 @@ ref_image = plt.imread('earth.jpeg')[...,:3]/255.
 
 
 scene = init_scene(key, ref_image, 800)
-image = render(scene, ref_image)
+image = render_image(scene, ref_image)
 
 fig, (ax) = plt.subplots(1, 2)
 sbimshow(image, title="Random init", ax=ax[0])
@@ -29,19 +29,20 @@ optimiser = optax.adam(scheduler)
 opt_state = optimiser.init(scene)
 
 losses = []
-# start_time = time.time()
+start_time = time.time()
 for i in tqdm(range(1, nb_iter+1), disable=True):
     scene, opt_state, loss = train_step(scene, ref_image, opt_state, optimiser)
     losses.append(loss)
     if i % 100 == 0 or i <= 3:
         print(f'Iteration: {i}        Loss: {loss:.3f}')
-# wall_time = time.time() - start_time
+wall_time = time.time() - start_time
 
 ## Number of params in scene
 print("\nNumber of params:", jnp.size(scene))
 print("Number of pixels:", jnp.size(ref_image))
+print("Wall time in h:m:s:", time.strftime("%H:%M:%S", time.gmtime(wall_time)))
 
-image = render(scene, ref_image)
+image = render_image(scene, ref_image)
 
 fig, (ax) = plt.subplots(1, 2)
 sbimshow(image, title="Final render", ax=ax[0])

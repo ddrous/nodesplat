@@ -21,22 +21,13 @@ def render_pixel(scene: Scene2D, x: jnp.ndarray):
     scalings = scene[:, 2:4]
     rotations = scene[:, 4:5]
     colours = scene[:, 5:8]
-    opacities = scene[:, 8:]
+    opacities = scene[:, 8:9]
 
     densities = jax.vmap(get_density, in_axes=(0, 0, 0, None))(means, scalings, rotations, x)[:, None]
     densities = jnp.nan_to_num(densities, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # return jnp.sum(densities * colours * opacities, axis=0)
-    # return jnp.sum(densities * colours, axis=0)
-    # return jnp.sum(jax.nn.sigmoid(densities * colours * opacities), axis=0)
-
-    # return jnp.sum(1/ jnp.exp(-densities * colours), axis=0)
-    # return jnp.sum(jax.nn.sigmoid(densities * colours), axis=0)
-    # return jnp.sum((densities * colours), axis=0)
-
     # return jnp.clip(jnp.sum(densities * colours, axis=0), 0., 1.)
-    # return jnp.clip(jnp.sum(densities * colours * opacities, axis=0), 0., 1.)
-    return jnp.clip(jnp.sum(densities * colours, axis=0), 0., 1.)
+    return jnp.clip(jnp.mean(densities * colours, axis=0), 0., 1.)
 
 
 render_pixels_1D = jax.vmap(render_pixel, in_axes=(None, 0), out_axes=0)

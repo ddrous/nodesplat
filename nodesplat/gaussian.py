@@ -10,21 +10,13 @@ import equinox as eqx
 
 
 
-
-Gaussian2D = jnp.ndarray
-Scene2D = jnp.ndarray                  ## A collection of 2D Gaussians
-
-# class ChangingScene(NamedTuple):    ## The gaussians now have objectness, and some of them are transformed by the neural net
-#   scene: Scene2D
-#   neuralnet: eqx.Module
-
 class ChangingScene(NamedTuple):    ## The gaussians now have objectness, and some of them are transformed by the neural net
   scene: eqx.Module
   engine: eqx.Module
 
 
 
-def init_gaussian(key, width=256., height=256.) -> Gaussian2D:
+def init_gaussian(key, width=256., height=256.) -> jnp.ndarray:
     """Returns the initial model params."""
     keys = get_new_keys(key, 6)
 
@@ -41,19 +33,26 @@ def init_gaussian(key, width=256., height=256.) -> Gaussian2D:
 
 
 
-# def init_scene(key, image, N: int) -> Scene2D:
-#     """Returns the initial model params."""
-#     keys = get_new_keys(key, N)
-#     gaussians = [init_gaussian(keys[i], image.shape[0], image.shape[1]) for i in range(N)]
-#     return jnp.stack(gaussians, axis=0)
+def init_gaussians(key, image, N: int) -> jnp.ndarray:
+    """Returns the initial model params."""
+    keys = get_new_keys(key, N)
+    gaussians = [init_gaussian(keys[i], image.shape[0], image.shape[1]) for i in range(N)]
+    return jnp.stack(gaussians, axis=0)
 
 
 class EqxScene(eqx.Module):
     gaussians: jnp.ndarray
     def __init__(self, key, image, N):
-        keys = get_new_keys(key, N)
-        gaussians = [init_gaussian(keys[i], image.shape[0], image.shape[1]) for i in range(N)]
-        self.gaussians = jnp.stack(gaussians, axis=0)
+        self.gaussians = init_changing_scene(key, image, N)
+
+
+# def init_static_scene(key, image, N: int) -> eqx.Module:
+#     """Returns the initial model params."""
+#     key = get_new_keys(key, 1)
+#     scene = EqxScene(key, image, N)
+
+#     return scene
+
 
 
 def init_changing_scene(key, video, N: int) -> ChangingScene:

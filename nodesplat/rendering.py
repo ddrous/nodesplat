@@ -14,14 +14,14 @@ from functools import partial
 
 THRESHOLD = 0.9
 
-def render_pixel(scene: Scene2D, x: jnp.ndarray):
+def render_pixel(gaussians: jnp.ndarray, x: jnp.ndarray):
     """Render a single pixel."""
 
-    means = scene[:, :2]
-    scalings = scene[:, 2:4]
-    rotations = scene[:, 4:5]
-    colours = scene[:, 5:8]
-    opacities = scene[:, 8:9]
+    means = gaussians[:, :2]
+    scalings = gaussians[:, 2:4]
+    rotations = gaussians[:, 4:5]
+    colours = gaussians[:, 5:8]
+    opacities = gaussians[:, 8:9]
 
     densities = jax.vmap(get_density, in_axes=(0, 0, 0, None))(means, scalings, rotations, x)[:, None]
     densities = jnp.nan_to_num(densities, nan=0.0, posinf=0.0, neginf=0.0)
@@ -35,7 +35,7 @@ render_pixels_2D = jax.vmap(render_pixels_1D, in_axes=(None, 1), out_axes=1)
 
 
 
-def render_image(scene: Scene2D, ref_image: jnp.ndarray):
+def render_image(gaussians: jnp.ndarray, ref_image: jnp.ndarray):
     """
     Render the scene.
     """
@@ -43,40 +43,42 @@ def render_image(scene: Scene2D, ref_image: jnp.ndarray):
     meshgrid = jnp.meshgrid(jnp.arange(0, ref_image.shape[0]), jnp.arange(0, ref_image.shape[1]))
     pixels = jnp.stack(meshgrid, axis=0).T
 
-    image = render_pixels_2D(scene, pixels)
+    image = render_pixels_2D(gaussians, pixels)
 
     # return jnp.nan_to_num(image.squeeze(), nan=0.0, posinf=0.0, neginf=0.0)
     return image.squeeze()
 
 
-def penalty_loss(image):
+def penalty_loss(image: jnp.ndarray):
     return jnp.mean(jnp.where(image > 1., image, 0.))
 
-def mse_loss(scene: Scene2D, ref_image: jnp.ndarray):
+def mse_loss(gaussians: jnp.ndarray, ref_image: jnp.ndarray):
     """Calculate the MSE loss between the rendered image and the reference image."""
-    image = render_image(scene, ref_image)
+    image = render_image(gaussians, ref_image)
     ## Add penalty for values greater than 1
     return jnp.mean((image - ref_image) ** 2)
 
-def mae_loss(scene: Scene2D, ref_image: jnp.ndarray):
+def mae_loss(gaussians: jnp.ndarray, ref_image: jnp.ndarray):
     """Calculate the MSE loss between the rendered image and the reference image."""
-    image = render_image(scene, ref_image)
+    image = render_image(gaussians, ref_image)
     # return jnp.mean(jnp.abs(image - ref_image)) + 1.*penalty_loss(image)
     return jnp.mean(jnp.abs(image - ref_image))
 
 
-def dice_loss(scene: Scene2D, ref_image: jnp.ndarray):
+def dice_loss(gaussians: jnp.ndarray, ref_image: jnp.ndarray):
     """Calculate the MSE loss between the rendered image and the reference image."""
-    image = render_image(scene, ref_image)
+    image = render_image(gaussians, ref_image)
     return (jnp.sum(image * ref_image) * 2 / jnp.sum(image) + jnp.sum(ref_image)) + 1.*penalty_loss(image)
 
 
 @partial(jax.jit, static_argnums=(3,))
-def train_step(scene: Scene2D, ref_image: jnp.ndarray, opt_state, optimiser):
+def train_step(gaussians, ref_image, opt_state, optimiser):
     """Perform a single training step."""
-    loss, grad = jax.value_and_grad(mae_loss)(scene, ref_image)
+
+    loss, grad = jax.value_and_grad(mae_loss)(gaussians, ref_image)
     updates, new_opt_state = optimiser.update(grad, opt_state)
-    new_scene = optax.apply_updates(scene, updates)
+    new_scene = optax.apply_updates(gaussians, updates)
+
     return new_scene, new_opt_state, loss
 
 
@@ -98,7 +100,7 @@ def train_step(scene: Scene2D, ref_image: jnp.ndarray, opt_state, optimiser):
 
 
 
-def render_pixel_trans(gaussians: Scene2D, transform: jnp.ndarray, x: jnp.ndarray):
+def render_pixel_trans(gaussians: jnp.ndarray, transform: jnp.ndarray, x: jnp.ndarray):
     """Render a single pixel; with some gaussians transformed."""
 
     means = gaussians[:, :2]
@@ -127,7 +129,7 @@ def render_pixel_trans(gaussians: Scene2D, transform: jnp.ndarray, x: jnp.ndarra
 render_pixels_1D_trans = jax.vmap(render_pixel_trans, in_axes=(None, None, 0), out_axes=0)
 render_pixels_2D_trans = jax.vmap(render_pixels_1D_trans, in_axes=(None, None, 1), out_axes=1)
 
-def render_video(gaussians: Scene2D, transforms:jnp.ndarray, ref_video: jnp.ndarray):
+def render_video(gaussians: jnp.ndarray, transforms:jnp.ndarray, ref_video: jnp.ndarray):
     """
     Render the video as a series of V images. 
     scene is:        N x 9 gausians, 

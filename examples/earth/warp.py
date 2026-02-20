@@ -22,12 +22,12 @@ PRINT_EVERY = 10
 LEARNING_RATE = 1e-4
 # NB_LOSS_FRAMES = 2
 NB_LOSS_PIXELS = 50
-P_FORCING = 0.05
+P_FORCING = 0.0
 REC_FEAT_DIM = 1024
 
 ROOT_WIDTH = 32
-ROOT_DEPTH = 3
-NUM_FOURIER_FREQS = 12
+ROOT_DEPTH = 2
+NUM_FOURIER_FREQS = 16
 
 #%% Cell 2: Plotting Helpers & Data Loading
 def sbimshow(img, title="", ax=None):
@@ -413,7 +413,9 @@ class WARP(eqx.Module):
             rgb_fg = jax.nn.sigmoid(out[0:3])
             rgb_bg = jax.nn.sigmoid(out[3:6])
             alpha  = jax.nn.sigmoid(out[6:7])
+
             return alpha * rgb_fg + (1.0 - alpha) * rgb_bg
+            # return rgb_fg
 
         return jax.vmap(render_pt)(thetas, coords)
 
@@ -459,6 +461,7 @@ class WARP(eqx.Module):
             dx_feat = (frame_t_feats - prev_frame_selected_feats) / jnp.sqrt(frame_t_feats.size)
 
             # 4. Weight-space Recurrence Update
+            # theta_next = self.A @ theta
             theta_next = self.A @ theta + self.B @ dx_feat
             
             new_state = (theta_next, frame_t, subk)
@@ -503,7 +506,7 @@ def train_step(model, opt_state, key, ref_video, coords_grid, p_forcing):
             pred_video = m.get_thetas_and_preds(ref_video, p_forcing, key, coords_grid)
             
             # --- CRITICAL FIX: Use the full video loss ---
-            loss_full = jnp.mean(jnp.abs(pred_video - ref_video))
+            loss_full = jnp.mean(jnp.abs(pred_video[1:] - ref_video[1:]))
             
             # Add a 2x loss boost explicitly for frame 0 to force theta_0 to wake up quickly
             loss_t0 = jnp.mean(jnp.abs(pred_video[0] - ref_video[0]))
@@ -564,14 +567,16 @@ plt.show()
 
 # Plot Matrix A Before/After
 A_final = model.A
-subsample_step = max(1, model.d_theta // 100) 
+# subsample_step = max(1, model.d_theta // 100) 
+subsample_step = 1 
+vmin, vmax = -1e-4, 1e-4
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-im1 = axes[0].imshow(A_init[::subsample_step, ::subsample_step], cmap='viridis')
+im1 = axes[0].imshow(A_init[::subsample_step, ::subsample_step], cmap='viridis', vmin=vmin, vmax=vmax)
 axes[0].set_title(f"Recurrence Matrix A (Init)\nSubsampled step={subsample_step}")
 plt.colorbar(im1, ax=axes[0])
 
-im2 = axes[1].imshow(A_final[::subsample_step, ::subsample_step], cmap='viridis')
+im2 = axes[1].imshow(A_final[::subsample_step, ::subsample_step], cmap='viridis', vmin=vmin, vmax=vmax)
 axes[1].set_title(f"Recurrence Matrix A (Final)\nSubsampled step={subsample_step}")
 plt.colorbar(im2, ax=axes[1])
 

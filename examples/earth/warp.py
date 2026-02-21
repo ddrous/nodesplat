@@ -398,6 +398,8 @@ class WARP(eqx.Module):
         self.A = jnp.eye(self.d_theta)
         # B is now significantly reduced: (d_theta, d_feat) instead of (d_theta, H*W*C)
         self.B = jnp.zeros((self.d_theta, d_feat))
+        ## B is initialized with small random values to encourage learning useful gradients from the start
+        # self.B = jax.random.normal(k_B, (self.d_theta, d_feat)) * 1e-4
 
         print(f"Model Initialized:")
         print(f"  d_theta (State Size): {self.d_theta}")
@@ -428,6 +430,8 @@ class WARP(eqx.Module):
         # Equinox convolutions expect (C, H, W)
         init_gt_frame_chw = jnp.transpose(init_gt_frame, (2, 0, 1)) 
         # init_gt_frame_chw = init_gt_frame.reshape(-1)       ## TODO
+
+        print(f"Initial frame shape for hypernet_phi: {init_gt_frame_chw.shape}")
         theta_0 = self.hypernet_phi(init_gt_frame_chw)
         
         def scan_step(state, gt_curr_frame):
@@ -600,3 +604,33 @@ def count_trainable_params(model):
 # Total parameter in the model
 total_params = count_trainable_params(model)
 print(f"Total Trainable Parameters in WARP: {total_params}")
+
+
+
+
+#%%
+
+def plot_pred_ref_videos(video, ref_video=None, title="Render"):
+    fig, ax = plt.subplots(2, 3, figsize=(12, 8))
+    t_mid = len(video) // 2 - 1
+    # t_end = len(video) - 1
+    t_end = 25
+    # t_mid = 1
+    # t_end = 2
+
+    sbimshow(video[0], title=f"{title} t=0", ax=ax[0, 0])
+    sbimshow(video[t_mid], title=f"{title} t={t_mid}", ax=ax[0, 1])
+    sbimshow(video[t_end], title=f"{title} t={t_end}", ax=ax[0, 2])
+
+    sbimshow(ref_video[0], title="Ref t=0", ax=ax[1, 0])
+    sbimshow(ref_video[t_mid], title=f"Ref t={t_mid}", ax=ax[1, 1])
+    sbimshow(ref_video[t_end], title=f"Ref t={t_end}", ax=ax[1, 2])
+    plt.tight_layout()
+    plt.show()
+
+ref_video_long = jnp.concatenate((ref_video, jnp.zeros_like(ref_video)), axis=0)
+
+final_video = eqx.filter_jit(model.get_thetas_and_preds)(ref_video_long, 0.0, key, coords_grid)
+
+plot_pred_ref_videos(final_video, ref_video_long, title="Final (P_forcing=0)")
+
